@@ -31,26 +31,40 @@ func main() {
 	case "mdnf":
 		fs := flag.NewFlagSet("mdnf", flag.ExitOnError)
 		in := fs.String("in", "", "input .gexp or .json file")
+		statsFlag := fs.Bool("stats", false, "print stats to stderr")
+		statsJSON := fs.String("stats-json", "", "write stats to JSON file")
 		_ = fs.Parse(os.Args[2:])
 		must(*in != "", "-in required")
 		spec, err := readSpec(*in)
 		mustErr(err)
 		var paths []ga.Path
 		start := time.Now()
-		_, _ = ga.EnumerateMDNF(context.Background(), &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
+		stats, err := ga.EnumerateMDNF(context.Background(), &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
 			paths = append(paths, p)
 			return true
 		})
-		for _, p := range paths {
-			for i, id := range p.EdgeIDs {
-				if i > 0 {
-					fmt.Print(" ")
-				}
-				fmt.Print(id)
+		mustErr(err)
+		fmt.Fprintln(os.Stdout, ga.MDNF(paths))
+		if *statsFlag || *statsJSON != "" {
+			ms := time.Duration(stats.ElapsedNS).Milliseconds()
+			if ms == 0 {
+				ms = time.Since(start).Milliseconds()
 			}
-			fmt.Println()
+			if *statsFlag {
+				fmt.Fprintf(os.Stderr, "stats: paths=%d expanded=%d pruned=%d elapsed_ms=%d\n", stats.NumPaths, stats.NodesExpanded, stats.Pruned, ms)
+			}
+			if *statsJSON != "" {
+				b, err := json.MarshalIndent(stats, "", "  ")
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "write --stats-json: %v\n", err)
+					os.Exit(1)
+				}
+				if err := os.WriteFile(*statsJSON, b, 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "write --stats-json: %v\n", err)
+					os.Exit(1)
+				}
+			}
 		}
-		fmt.Fprintf(os.Stderr, "#paths=%d, elapsed=%s\n", len(paths), time.Since(start))
 	default:
 		usage()
 	}
