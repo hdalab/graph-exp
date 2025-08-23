@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -20,23 +21,19 @@ func main() {
 	switch os.Args[1] {
 	case "matrix":
 		fs := flag.NewFlagSet("matrix", flag.ExitOnError)
-		in := fs.String("in", "", "input .gexp file")
+		in := fs.String("in", "", "input .gexp or .json file")
 		_ = fs.Parse(os.Args[2:])
 		must(*in != "", "-in required")
-		data, err := os.ReadFile(*in)
-		mustErr(err)
-		spec, err := ga.ParseGexp(data)
+		spec, err := readSpec(*in)
 		mustErr(err)
 		ms := ga.StructuralMatrix(&spec.G)
 		printMatrix(os.Stdout, ms)
 	case "mdnf":
 		fs := flag.NewFlagSet("mdnf", flag.ExitOnError)
-		in := fs.String("in", "", "input .gexp file")
+		in := fs.String("in", "", "input .gexp or .json file")
 		_ = fs.Parse(os.Args[2:])
 		must(*in != "", "-in required")
-		data, err := os.ReadFile(*in)
-		mustErr(err)
-		spec, err := ga.ParseGexp(data)
+		spec, err := readSpec(*in)
 		mustErr(err)
 		var paths []ga.Path
 		start := time.Now()
@@ -60,7 +57,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "Usage:\n  spath matrix -in examples/x.gexp\n  spath mdnf -in examples/x.gexp\n")
+	fmt.Fprintf(os.Stderr, "Usage:\n  spath matrix -in examples/x.gexp\n  spath matrix -in examples/x.json\n  spath mdnf -in examples/x.gexp\n  spath mdnf -in examples/x.json\n")
 	os.Exit(2)
 }
 func must(cond bool, msg string) {
@@ -74,6 +71,17 @@ func mustErr(err error) {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func readSpec(path string) (*ga.Spec, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if json.Valid(data) {
+		return ga.ParseJson(data)
+	}
+	return ga.ParseGexp(data)
 }
 
 func printMatrix(w io.Writer, ms ga.Structural) {
