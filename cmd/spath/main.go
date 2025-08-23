@@ -14,6 +14,21 @@ import (
 	"github.com/hdalab/ga"
 )
 
+func humanDur(ns int64) string {
+	if ns < 1_000 { // < 1µs
+		return fmt.Sprintf("%dns", ns)
+	}
+	if ns < 1_000_000 { // < 1ms
+		return fmt.Sprintf("%dµs", ns/1_000)
+	}
+	if ns < 1_000_000_000 { // < 1s
+		return fmt.Sprintf("%dms", ns/1_000_000)
+	}
+	// секунды с десятыми
+	s := float64(ns) / 1_000_000_000.0
+	return fmt.Sprintf("%.1fs", s)
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -39,19 +54,35 @@ func main() {
 		mustErr(err)
 		var paths []ga.Path
 		start := time.Now()
-		stats, err := ga.EnumerateMDNF(context.Background(), &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
+		ctx := context.Background()
+		stats, err := ga.EnumerateMDNF(ctx, &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
 			paths = append(paths, p)
 			return true
 		})
 		mustErr(err)
-		fmt.Fprintln(os.Stdout, ga.MDNF(paths))
-		if *statsFlag || *statsJSON != "" {
-			ms := time.Duration(stats.ElapsedNS).Milliseconds()
-			if ms == 0 {
-				ms = time.Since(start).Milliseconds()
+		// дозаполняем время при необходимости
+		measuredNS := time.Since(start).Nanoseconds()
+		if stats.ElapsedNS == 0 {
+			stats.ElapsedNS = measuredNS
+			if stats.NumPaths > 0 {
+				stats.NsPerPath = float64(stats.ElapsedNS) / float64(stats.NumPaths)
 			}
+		}
+
+		fmt.Fprintln(os.Stdout, ga.MDNF(paths))
+
+		if *statsFlag || *statsJSON != "" {
+			file := *in
+			n := spec.G.N
+			m := len(spec.G.Edges)
 			if *statsFlag {
-				fmt.Fprintf(os.Stderr, "stats: paths=%d expanded=%d pruned=%d elapsed_ms=%d\n", stats.NumPaths, stats.NodesExpanded, stats.Pruned, ms)
+				perPath := ""
+				if stats.NumPaths > 0 && stats.NsPerPath > 0 {
+					perPath = fmt.Sprintf(" (%.1fµs/path)", stats.NsPerPath/1_000.0)
+				}
+				fmt.Fprintf(os.Stderr,
+					"stats: file=%s n=%d m=%d s=%d t=%d paths=%d expanded=%d pruned=%d elapsed=%s%s\n",
+					file, n, m, spec.S, spec.T, stats.NumPaths, stats.NodesExpanded, stats.Pruned, humanDur(stats.ElapsedNS), perPath)
 			}
 			if *statsJSON != "" {
 				b, err := json.MarshalIndent(stats, "", "  ")
