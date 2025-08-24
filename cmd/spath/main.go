@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -25,20 +26,58 @@ func main() {
 	case "mdnf":
 		var statsFlag *bool
 		var statsJSON *string
+		var countOnly *bool
+		var maxPaths *int
+		var timeout *time.Duration
+		var outFile *string
+		var quiet bool
 		spec, in := parseSpec("mdnf", os.Args[2:], func(fs *flag.FlagSet) {
 			statsFlag = fs.Bool("stats", false, "print stats to stderr")
 			statsJSON = fs.String("stats-json", "", "write stats to JSON file")
+			countOnly = fs.Bool("count", false, "only print number of terms/paths")
+			maxPaths = fs.Int("max-paths", 0, "stop after enumerating N paths (0 for no limit)")
+			timeout = fs.Duration("timeout", 0, "stop after duration (e.g. 2s, 500ms)")
+			outFile = fs.String("o", "", "write MDNF result to file")
+			fs.BoolVar(&quiet, "q", false, "suppress regular output")
+			fs.BoolVar(&quiet, "quiet", false, "suppress regular output")
 		})
-		var paths []ga.Path
+
 		start := time.Now()
 		ctx := context.Background()
+		if *timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, *timeout)
+			defer cancel()
+		}
+
+		var paths []ga.Path
+		var numPaths int
+		var limitReached bool
+		var timedOut bool
 		stats, err := ga.EnumerateMDNF(ctx, &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
-			paths = append(paths, p)
+			if ctx.Err() != nil {
+				timedOut = true
+				return false
+			}
+			numPaths++
+			if !*countOnly {
+				paths = append(paths, p)
+			}
+			if *maxPaths > 0 && numPaths >= *maxPaths {
+				limitReached = true
+				return false
+			}
 			return true
 		})
-		mustErr(err)
-		// заполнить статистику, если время не задано
-		measuredNS := time.Since(start).Nanoseconds()
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			mustErr(err)
+		}
+		if ctx.Err() != nil {
+			timedOut = true
+		}
+
+		finish := time.Now()
+		measuredNS := finish.Sub(start).Nanoseconds()
 		if stats.ElapsedNS == 0 {
 			stats.ElapsedNS = measuredNS
 			if stats.NumPaths > 0 {
@@ -46,7 +85,39 @@ func main() {
 			}
 		}
 
-		fmt.Fprintln(os.Stdout, ga.MDNF(paths))
+		if !quiet {
+			if *countOnly {
+				if *outFile != "" {
+					if err := os.WriteFile(*outFile, []byte(fmt.Sprintf("%d\n", numPaths)), 0644); err != nil {
+						fmt.Fprintf(os.Stderr, "write -o: %v\n", err)
+						os.Exit(1)
+					}
+				}
+				fmt.Fprintln(os.Stdout, numPaths)
+			} else {
+				mdnf := ga.MDNF(paths)
+				fmt.Fprintln(os.Stdout, mdnf)
+				if *outFile != "" {
+					if err := os.WriteFile(*outFile, []byte(mdnf+"\n"), 0644); err != nil {
+						fmt.Fprintf(os.Stderr, "write -o: %v\n", err)
+						os.Exit(1)
+					}
+				}
+			}
+		} else if *outFile != "" {
+			if *countOnly {
+				if err := os.WriteFile(*outFile, []byte(fmt.Sprintf("%d\n", numPaths)), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "write -o: %v\n", err)
+					os.Exit(1)
+				}
+			} else {
+				mdnf := ga.MDNF(paths)
+				if err := os.WriteFile(*outFile, []byte(mdnf+"\n"), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "write -o: %v\n", err)
+					os.Exit(1)
+				}
+			}
+		}
 
 		if *statsFlag || *statsJSON != "" {
 			file := in
@@ -57,12 +128,32 @@ func main() {
 				if stats.NumPaths > 0 && stats.NsPerPath > 0 {
 					perPath = fmt.Sprintf(" (%.1fµs/path)", stats.NsPerPath/1_000.0)
 				}
-				fmt.Fprintf(os.Stderr,
-					"stats: file=%s n=%d m=%d s=%d t=%d paths=%d expanded=%d pruned=%d elapsed=%s%s\n",
+				msg := fmt.Sprintf("stats: file=%s n=%d m=%d s=%d t=%d paths=%d expanded=%d pruned=%d elapsed=%s%s",
 					file, n, m, spec.S, spec.T, stats.NumPaths, stats.NodesExpanded, stats.Pruned, util.HumanDur(stats.ElapsedNS), perPath)
+				if limitReached {
+					msg += fmt.Sprintf(" truncated at %d", *maxPaths)
+				}
+				if timedOut {
+					msg += " timed out"
+				}
+				fmt.Fprintln(os.Stderr, msg)
 			}
 			if *statsJSON != "" {
-				b, err := json.MarshalIndent(stats, "", "  ")
+				type statsOut struct {
+					ga.Stats
+					StartedAt    string `json:"startedAt"`
+					FinishedAt   string `json:"finishedAt"`
+					TimedOut     bool   `json:"timedOut"`
+					LimitReached bool   `json:"limitReached"`
+				}
+				sj := statsOut{
+					Stats:        stats,
+					StartedAt:    start.Format(time.RFC3339),
+					FinishedAt:   finish.Format(time.RFC3339),
+					TimedOut:     timedOut,
+					LimitReached: limitReached,
+				}
+				b, err := json.MarshalIndent(sj, "", "  ")
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "write --stats-json: %v\n", err)
 					os.Exit(1)
