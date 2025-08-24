@@ -140,14 +140,14 @@ func main() {
 			}
 			if *statsJSON != "" {
 				type statsOut struct {
-					ga.EnumStats
+					ga.Stats
 					StartedAt    string `json:"startedAt"`
 					FinishedAt   string `json:"finishedAt"`
 					TimedOut     bool   `json:"timedOut"`
 					LimitReached bool   `json:"limitReached"`
 				}
 				sj := statsOut{
-					EnumStats:    stats,
+					Stats:        stats,
 					StartedAt:    start.Format(time.RFC3339),
 					FinishedAt:   finish.Format(time.RFC3339),
 					TimedOut:     timedOut,
