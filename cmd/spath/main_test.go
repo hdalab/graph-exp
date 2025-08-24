@@ -104,7 +104,7 @@ func TestMDNFCount(t *testing.T) {
 // TestMDNFMaxPaths проверяет усечение по флагу -max-paths.
 func TestMDNFMaxPaths(t *testing.T) {
 	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-max-paths", "1")
-	first := strings.Split(expectedMDNF(t), "|")[0] + "\n"
+	first := strings.TrimSpace(strings.Split(expectedMDNF(t), "|")[0]) + "\n"
 	if out != first {
 		t.Fatalf("max-paths output=%s want=%s", out, first)
 	}
