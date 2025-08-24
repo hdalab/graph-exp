@@ -1,3 +1,4 @@
+// Пакет main предоставляет CLI утилиту для работы с графовыми спецификациями.
 package main
 
 import (
@@ -18,23 +19,16 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "matrix":
-		fs := flag.NewFlagSet("matrix", flag.ExitOnError)
-		in := fs.String("in", "", "input .gexp or .json file")
-		_ = fs.Parse(os.Args[2:])
-		must(*in != "", "-in required")
-		spec, err := util.ReadSpec(*in)
-		mustErr(err)
+		spec, _ := parseSpec("matrix", os.Args[2:], nil)
 		ms := ga.StructuralMatrix(&spec.G)
 		util.PrintMatrix(os.Stdout, ms)
 	case "mdnf":
-		fs := flag.NewFlagSet("mdnf", flag.ExitOnError)
-		in := fs.String("in", "", "input .gexp or .json file")
-		statsFlag := fs.Bool("stats", false, "print stats to stderr")
-		statsJSON := fs.String("stats-json", "", "write stats to JSON file")
-		_ = fs.Parse(os.Args[2:])
-		must(*in != "", "-in required")
-		spec, err := util.ReadSpec(*in)
-		mustErr(err)
+		var statsFlag *bool
+		var statsJSON *string
+		spec, in := parseSpec("mdnf", os.Args[2:], func(fs *flag.FlagSet) {
+			statsFlag = fs.Bool("stats", false, "print stats to stderr")
+			statsJSON = fs.String("stats-json", "", "write stats to JSON file")
+		})
 		var paths []ga.Path
 		start := time.Now()
 		ctx := context.Background()
@@ -43,7 +37,7 @@ func main() {
 			return true
 		})
 		mustErr(err)
-		// fill stats if elapsed not set
+		// заполнить статистику, если время не задано
 		measuredNS := time.Since(start).Nanoseconds()
 		if stats.ElapsedNS == 0 {
 			stats.ElapsedNS = measuredNS
@@ -55,7 +49,7 @@ func main() {
 		fmt.Fprintln(os.Stdout, ga.MDNF(paths))
 
 		if *statsFlag || *statsJSON != "" {
-			file := *in
+			file := in
 			n := spec.G.N
 			m := len(spec.G.Edges)
 			if *statsFlag {
@@ -84,11 +78,13 @@ func main() {
 	}
 }
 
+// usage выводит краткую информацию о доступных командах.
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n  spath matrix -in examples/x.gexp\n  spath matrix -in examples/x.json\n  spath mdnf -in examples/x.gexp\n  spath mdnf -in examples/x.json\n")
 	os.Exit(2)
 }
 
+// must завершает программу, если условие ложно, выводя сообщение.
 func must(cond bool, msg string) {
 	if !cond {
 		fmt.Fprintln(os.Stderr, msg)
@@ -96,9 +92,24 @@ func must(cond bool, msg string) {
 	}
 }
 
+// mustErr завершает выполнение при возникновении ошибки.
 func mustErr(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+// parseSpec разбирает общие флаги и читает спецификацию графа.
+func parseSpec(name string, args []string, register func(fs *flag.FlagSet)) (*ga.Spec, string) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	in := fs.String("in", "", "input .gexp or .json file")
+	if register != nil {
+		register(fs)
+	}
+	_ = fs.Parse(args)
+	must(*in != "", "-in required")
+	spec, err := util.ReadSpec(*in)
+	mustErr(err)
+	return spec, *in
 }

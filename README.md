@@ -4,6 +4,63 @@ Demo/CLI for the [`github.com/hdalab/ga`](https://github.com/hdalab/ga) module.
 This repository is locked to [ga v0.1.3](https://github.com/hdalab/ga/releases/tag/v0.1.3).
 Specs may be written either in the original Gexp format or in JSON.
 
+## Установка
+
+Собрать и установить CLI можно с помощью:
+
+```bash
+go install ./cmd/spath@latest
+```
+
+Или локальной сборки:
+
+```bash
+go build -o spath ./cmd/spath
+./spath --help
+```
+
+## Примеры использования
+
+### matrix
+
+Команда `matrix` выводит структурную матрицу графа.
+
+```bash
+go run ./cmd/spath matrix -in examples/x.json
+```
+
+Пример вывода:
+
+```
+    0  1  2  3  4  5
+0 [ 0  a  b  0  0  0 ]
+1 [ 0  0  c  d  0  0 ]
+2 [ 0  0  0  e  f  i ]
+3 [ 0  0  0  0  g  0 ]
+4 [ 0  0  0  0  0  h ]
+5 [ 0  0  0  0  0  0 ]
+```
+
+### mdnf
+
+Команда `mdnf` формирует минимальную дизъюнктивную нормальную форму путей между `s` и `t`.
+
+```bash
+go run ./cmd/spath mdnf -in examples/x.json --stats
+```
+
+Пример выражения:
+
+```
+b*i+b*f*h+b*e*g*h+a*d*g*h+a*c*i+a*c*f*h+a*c*e*g*h
+```
+
+Пример вывода флагов `--stats`:
+
+```
+stats: file=examples/x.json n=6 m=9 s=0 t=5 paths=3 expanded=10 pruned=2 elapsed=1.2ms (0.4µs/path)
+```
+
 ## Commands
 ```bash
 go run ./cmd/spath matrix -in examples/x.gexp

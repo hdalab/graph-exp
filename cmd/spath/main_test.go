@@ -1,0 +1,88 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"os/exec"
+	"strings"
+	"testing"
+
+	"github.com/hdalab/ga"
+	util "github.com/hdalab/graph-exp/internal/util"
+)
+
+// runCmd запускает утилиту spath с заданными аргументами.
+func runCmd(t *testing.T, args ...string) (string, string) {
+	t.Helper()
+	cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &err
+	if e := cmd.Run(); e != nil {
+		t.Fatalf("runCmd: %v stderr=%s", e, err.String())
+	}
+	return out.String(), err.String()
+}
+
+// expectedMatrix возвращает ожидаемую структурную матрицу.
+func expectedMatrix(t *testing.T) string {
+	spec, err := util.ReadSpec("../../examples/x.gexp")
+	if err != nil {
+		t.Fatalf("ReadSpec: %v", err)
+	}
+	ms := ga.StructuralMatrix(&spec.G)
+	var buf bytes.Buffer
+	util.PrintMatrix(&buf, ms)
+	return buf.String()
+}
+
+// expectedMDNF вычисляет эталонное выражение MDNF.
+func expectedMDNF(t *testing.T) string {
+	spec, err := util.ReadSpec("../../examples/x.json")
+	if err != nil {
+		t.Fatalf("ReadSpec: %v", err)
+	}
+	var paths []ga.Path
+	_, err = ga.EnumerateMDNF(context.Background(), &spec.G, spec.S, spec.T, ga.EnumOptions{}, func(p ga.Path) bool {
+		paths = append(paths, p)
+		return true
+	})
+	if err != nil {
+		t.Fatalf("EnumerateMDNF: %v", err)
+	}
+	return ga.MDNF(paths) + "\n"
+}
+
+// TestMatrix проверяет вывод подкоманды matrix.
+func TestMatrix(t *testing.T) {
+	out, err := runCmd(t, "matrix", "-in", "../../examples/x.json")
+	if out != expectedMatrix(t) {
+		t.Fatalf("matrix output:\n%s\nwant:\n%s", out, expectedMatrix(t))
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNF проверяет вывод подкоманды mdnf.
+func TestMDNF(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json")
+	if out != expectedMDNF(t) {
+		t.Fatalf("mdnf output:\n%s\nwant:\n%s", out, expectedMDNF(t))
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNFStats проверяет вывод флагов статистики.
+func TestMDNFStats(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "--stats")
+	if out != expectedMDNF(t) {
+		t.Fatalf("mdnf output:\n%s\nwant:\n%s", out, expectedMDNF(t))
+	}
+	if !strings.HasPrefix(err, "stats:") {
+		t.Fatalf("missing stats: %s", err)
+	}
+}
