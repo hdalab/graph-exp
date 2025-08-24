@@ -49,6 +49,14 @@ go run ./cmd/spath matrix -in examples/x.json
 go run ./cmd/spath mdnf -in examples/x.json --stats
 ```
 
+Дополнительные флаги:
+
+- `-count` — вывести только число термов/путей.
+- `-max-paths N` — остановиться после первых `N` решений.
+- `-timeout 2s` — прервать поиск по истечении времени.
+- `-o FILE` — сохранить МДНФ в файл `FILE`.
+- `-q`, `--quiet` — подавить обычный вывод (оставить только статистику).
+
 Пример выражения:
 
 ```
@@ -77,6 +85,8 @@ Available fields include:
 - `NodesExpanded` — how many nodes were expanded during search
 - `Pruned` — how many branches were pruned
 - `NsPerPath` — average time per path
+- `startedAt` / `finishedAt` — временные метки (RFC3339)
+- `timedOut` / `limitReached` — признаки досрочного завершения
 
 Example:
 ```bash

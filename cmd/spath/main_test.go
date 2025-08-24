@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -84,5 +86,71 @@ func TestMDNFStats(t *testing.T) {
 	}
 	if !strings.HasPrefix(err, "stats:") {
 		t.Fatalf("missing stats: %s", err)
+	}
+}
+
+// TestMDNFCount проверяет вывод флага -count.
+func TestMDNFCount(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-count")
+	expected := strings.Count(expectedMDNF(t), "|") + 1
+	if out != fmt.Sprintf("%d\n", expected) {
+		t.Fatalf("count output=%s want=%d\n", out, expected)
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNFMaxPaths проверяет усечение по флагу -max-paths.
+func TestMDNFMaxPaths(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-max-paths", "1")
+	first := strings.Split(expectedMDNF(t), "|")[0] + "\n"
+	if out != first {
+		t.Fatalf("max-paths output=%s want=%s", out, first)
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNFQuiet проверяет подавление вывода флагом -q.
+func TestMDNFQuiet(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-q")
+	if out != "" {
+		t.Fatalf("quiet stdout=%s want empty", out)
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNFOutFile проверяет сохранение результата в файл флагом -o.
+func TestMDNFOutFile(t *testing.T) {
+	tmp := t.TempDir()
+	file := tmp + "/out.mdnf"
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-o", file, "-q")
+	if out != "" {
+		t.Fatalf("stdout=%s want empty", out)
+	}
+	data, readErr := os.ReadFile(file)
+	if readErr != nil {
+		t.Fatalf("read file: %v", readErr)
+	}
+	if string(data) != expectedMDNF(t) {
+		t.Fatalf("file output=%s want=%s", string(data), expectedMDNF(t))
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
+	}
+}
+
+// TestMDNFTimeout проверяет остановку по таймауту.
+func TestMDNFTimeout(t *testing.T) {
+	out, err := runCmd(t, "mdnf", "-in", "../../examples/x.json", "-count", "-timeout", "1ns")
+	if out != "0\n" {
+		t.Fatalf("timeout stdout=%s want 0", out)
+	}
+	if err != "" {
+		t.Fatalf("unexpected stderr: %s", err)
 	}
 }

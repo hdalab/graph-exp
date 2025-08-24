@@ -49,6 +49,14 @@ The `mdnf` command forms the minimal disjunctive normal form of paths between `s
 go run ./cmd/spath mdnf -in examples/x.json --stats
 ```
 
+Additional useful flags:
+
+- `-count` – print only the number of terms/paths.
+- `-max-paths N` – stop after the first `N` paths.
+- `-timeout 2s` – abort enumeration after the given duration.
+- `-o FILE` – save the resulting MDNF to `FILE`.
+- `-q`, `--quiet` – suppress normal output (useful together with `--stats`).
+
 Example expression:
 
 ```
@@ -79,6 +87,8 @@ Available fields include:
 - `NodesExpanded` — how many nodes were expanded during search
 - `Pruned` — how many branches were pruned
 - `NsPerPath` — average time per path
+- `startedAt` / `finishedAt` — timestamps of enumeration (RFC3339)
+- `timedOut` / `limitReached` — flags indicating early termination
 
 Example:
 
